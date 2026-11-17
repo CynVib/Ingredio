@@ -2,10 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from '@supabase/supabase-js';
 
 // ============================================
-// SUPABASE CLIENT INITIALISIERUNG
-// ============================================
-const supabaseUrl = 'https://lgeznkhgvbrtrwowugyi.supabase.co/rest/v1/';
-const supabaseKey = 'sb_publishable_nEwvenz4iQELOGUd61q5gg_TF79VGMJ';
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ============================================
