@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingredio - Kulinarisches Deduktionsspiel</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    /* Animation für neue Zutaten */
+    @keyframes dropIn {
+      0% {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.8);
+      }
+      60% {
+        transform: translateY(5px) scale(1.05);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .ingredient-tag {
+      animation: dropIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Pulse-Animation für Feedback */
+    @keyframes pulse-text {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .pulse-text {
+      animation: pulse-text 1s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-amber-50 via-orange-50 to-stone-100">
+  <div id="app"></div>
+
+  <script>
+    // ============================================
+    // DATENBANK: Gerichte
+    // ============================================
+    const GERICHTE_DATENBANK = [
+      {
+        id: 1,
+        name: "Tacos",
+        cuisine: "Mexiko",
+        exact_ingredients: ["maistortilla", "rindfleisch", "zwiebel", "koriander", "limette"],
+        regional_ingredients: ["avocado", "chili", "bohnen", "tomate", "cumin", "jalapeno", "tequila"]
+      },
+      {
+        id: 2,
+        name: "Carbonara",
+        cuisine: "Italien",
+        exact_ingredients: ["spaghetti", "guanciale", "pecorino", "ei", "schwarzer pfeffer"],
+        regional_ingredients: ["parmesan", "olivenöl", "knoblauch", "weisswein", "basilikum"]
+      },
+      {
+        id: 3,
+        name: "Sushi",
+        cuisine: "Japan",
+        exact_ingredients: ["reis", "lachs", "thunfisch", "nori", "rettich"],
+        regional_ingredients: ["avocado", "gurke", "sojasauce", "ingwer", "wasabi", "sesam", "miso"]
+      },
+      {
+        id: 4,
+        name: "Pad Thai",
+        cuisine: "Thailand",
+        exact_ingredients: ["reisnudeln", "garnelen", "tofue", "ei", "erdnüsse", "bohnensprossen"],
+        regional_ingredients: ["fischsauce", "limette", "chili", "knoblauch", "frühlingszwiebel"]
+      },
+      {
+        id: 5,
+        name: "Paella",
+        cuisine: "Spanien",
+        exact_ingredients: ["reis", "safran", "meeresfrüchte", "hähnchen", "paprika"],
+        regional_ingredients: ["rosmarin", "olivenöl", "knoblauch", "tomate", "wein", "chorizo"]
+      }
+    ];
+
+    // ============================================
+    // FARBEN
+    // ============================================
+    const FARBEN = {
+      grün: {
+        bg: "bg-emerald-500",
+        text: "text-white",
+        border: "border-emerald-600",
+        label: "Im Gericht"
+      },
+      gelb: {
+        bg: "bg-amber-400",
+        text: "text-stone-900",
+        border: "border-amber-500",
+        label: "Region"
+      },
+      rot: {
+        bg: "bg-rose-400",
+        text: "text-white",
+        border: "border-rose-500",
+        label: "Kein Bezug"
+      }
+    };
+
+    // ============================================
+    // STATE
+    // ============================================
+    let state = {
+      tagesGericht: null,
+      inputWert: "",
+      gerateneZutaten: [],
+      spielStatus: "spielend",
+      losungsModalOffen: false,
+      losungsInput: "",
+      feedbackNachricht: "",
+      maxVersuche: 6,
+      versuche: 0
+    };
+
+    // ============================================
+    // FUNKTIONEN
+    // ============================================
+    function getZufälligesGericht() {
+      const index = Math.floor(Math.random() * GERICHTE_DATENBANK.length);
+      return GERICHTE_DATENBANK[index];
+    }
+
+    function handleZutatEingeben() {
+      const zutat = state.inputWert.toLowerCase().trim();
+      if (!zutat) return;
+
+      if (state.gerateneZutaten.some(z => z.name === zutat)) {
+        state.feedbackNachricht = "Diese Zutat hast du schon eingegeben!";
+        render();
+        return;
+      }
+
+      let status;
+      if (state.tagesGericht.exact_ingredients.includes(zutat)) {
+        status = "grün";
+      } else if (state.tagesGericht.regional_ingredients.includes(zutat)) {
+        status = "gelb";
+      } else {
+        status = "rot";
+      }
+
+      state.gerateneZutaten.push({ name: zutat, status });
+      state.inputWert = "";
+      state.versuche++;
+      render();
+    }
+
+    function handleLösungAbgeben() {
+      const losung = state.losungsInput.toLowerCase().trim();
+      if (!losung) return;
+
+      if (losung === state.tagesGericht.name.toLowerCase()) {
+        state.spielStatus = "gewonnen";
+      } else {
+        state.spielStatus = "verloren";
+      }
+      state.losungsModalOffen = false;
+      state.losungsInput = "";
+      render();
+    }
+
+    function neuesSpiel() {
+      state = {
+        tagesGericht: getZufälligesGericht(),
+        inputWert: "",
+        gerateneZutaten: [],
+        spielStatus: "spielend",
+        losungsModalOffen: false,
+        losungsInput: "",
+        feedbackNachricht: "",
+        maxVersuche: 6,
+        versuche: 0
+      };
+      render();
+    }
+
+    function generateShareText() {
+      const statusIcons = state.gerateneZutaten.map(z => {
+        switch (z.status) {
+          case "grün": return "🟩";
+          case "gelb": return "🟨";
+          case "rot": return "🟥";
+        }
+      });
+      return `🍲 Ingredio gelöst in ${state.versuche} Versuchen!\n\n${statusIcons.join("")}\n\n#ingredio`;
+    }
+
+    function handleShare() {
+      const text = generateShareText();
+      if (navigator.share) {
+        navigator.share({ text });
+      } else {
+        navigator.clipboard.writeText(text);
+        state.feedbackNachricht = "Ergebnis kopiert!";
+        render();
+      }
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === "Enter") {
+        handleZutatEingeben();
+      }
+    }
+
+    function handleLosungKeyDown(e) {
+      if (e.key === "Enter") {
+        handleLösungAbgeben();
+      }
+    }
+
+    // ============================================
+    // RENDER
+    // ============================================
+    function renderGewonnen() {
+      return `
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center">
+          <div class="text-6xl mb-4">🎉</div>
+          <h2 class="text-3xl font-bold text-stone-800 mb-2">Gratulation!</h2>
+          <p class="text-lg text-stone-600 mb-2">
+            Du hast <span class="font-semibold text-emerald-600">${state.tagesGericht.name}</span> erraten!
+          </p>
+          <p class="text-stone-500 mb-6">
+            ${state.versuche} ${state.versuche === 1 ? "Versuch" : "Versuche"} benötigt
+          </p>
+
+          <div class="bg-amber-50 rounded-2xl p-4 mb-6">
+            <p class="text-sm text-amber-800">🌍 ${state.tagesGericht.cuisine}</p>
+          </div>
+
+          <div class="mb-6">
+            <p class="text-sm text-stone-500 mb-2">Deine Hinweise:</p>
+            <div class="flex flex-wrap justify-center gap-2">
+              ${state.gerateneZutaten.map(z => `
+                <span class="px-3 py-1.5 rounded-full text-sm font-medium ${FARBEN[z.status].bg} ${FARBEN[z.status].text}">
+                  ${z.name}
+                </span>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="flex gap-3 justify-center">
+            <button onclick="handleShare()" class="px-6 py-3 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors">
+              Teilen
+            </button>
+            <button onclick="neuesSpiel()" class="px-6 py-3 bg-stone-200 text-stone-700 rounded-xl font-medium hover:bg-stone-300 transition-colors">
+              Neues Spiel
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderVerloren() {
+      return `
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center">
+          <div class="text-6xl mb-4">😔</div>
+          <h2 class="text-3xl font-bold text-stone-800 mb-2">Leider daneben!</h2>
+          <p class="text-lg text-stone-600 mb-4">
+            Das Gericht war <span class="font-semibold text-emerald-600">${state.tagesGericht.name}</span>
+          </p>
+
+          <div class="bg-amber-50 rounded-2xl p-4 mb-6">
+            <p class="text-sm text-amber-800">🌍 Küche: ${state.tagesGericht.cuisine}</p>
+          </div>
+
+          <button onclick="neuesSpiel()" class="px-8 py-3 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors">
+            Nochmal spielen
+          </button>
+        </div>
+      `;
+    }
+
+    function renderSpiel() {
+      return `
+        <!-- Header -->
+        <header class="pt-8 pb-4 text-center">
+          <h1 class="text-4xl font-bold text-stone-800 tracking-tight">🍲 Ingredio</h1>
+          <p class="text-stone-500 mt-1">Errate das Gericht anhand seiner Zutaten</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-lg mx-auto px-4 pb-8">
+          <!-- Küchen-Info -->
+          <div class="bg-white/60 backdrop-blur rounded-2xl p-4 mb-6 text-center shadow-sm">
+            <p class="text-sm text-stone-600">
+              Das gesuchte Gericht kommt aus der <span class="font-medium text-amber-700">${state.tagesGericht.cuisine}</span> Küche
+            </p>
+          </div>
+
+          <!-- Eingabe-Bereich -->
+          <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <label class="block text-sm font-medium text-stone-600 mb-2">Zutat eingeben:</label>
+            <div class="flex gap-2">
+              <input
+                id="zutat-input"
+                type="text"
+                oninput="state.inputWert = this.value"
+                onkeydown="handleKeyDown(event)"
+                placeholder="z.B. avocado, chili..."
+                class="flex-1 px-4 py-3 border-2 border-stone-200 rounded-xl text-stone-800 placeholder-stone-400 focus:border-amber-400 focus:outline-none transition-colors"
+              />
+              <button onclick="handleZutatEingeben()" class="px-6 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition-colors active:scale-95">
+                Eingeben
+              </button>
+            </div>
+            <div id="feedback-container"></div>
+          </div>
+
+          <!-- Lösung-Button -->
+          <button onclick="state.losungsModalOffen = true; render()" class="w-full py-4 bg-stone-800 text-white rounded-2xl font-semibold text-lg hover:bg-stone-900 transition-colors shadow-lg mb-6">
+            🍳 Gericht lösen
+          </button>
+
+          <!-- Legende -->
+          <div class="flex justify-center gap-6 mb-6 text-sm">
+            <div class="flex items-center gap-2">
+              <span class="w-4 h-4 rounded-full bg-emerald-500"></span>
+              <span class="text-stone-600">Im Gericht</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-4 h-4 rounded-full bg-amber-400"></span>
+              <span class="text-stone-600">Region</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-4 h-4 rounded-full bg-rose-400"></span>
+              <span class="text-stone-600">Ohne Bezug</span>
+            </div>
+          </div>
+
+          <!-- Kochtopf -->
+          <div class="bg-gradient-to-b from-stone-800 to-stone-900 rounded-3xl p-6 shadow-xl min-h-64">
+            <div class="text-center mb-4">
+              <span class="text-2xl">🍳</span>
+              <h2 class="text-stone-300 text-sm font-medium mt-1">Dein Kochtopf</h2>
+            </div>
+
+            <div id="pot-content">
+              ${state.gerateneZutaten.length === 0 ? `
+                <div class="flex flex-col items-center justify-center h-40 text-stone-500">
+                  <span class="text-4xl mb-2">🥄</span>
+                  <p class="text-sm">Hier erscheinen deine Zutaten...</p>
+                </div>
+              ` : `
+                <div class="flex flex-wrap gap-2 justify-center">
+                  ${state.gerateneZutaten.map((z, i) => `
+                    <div
+                      class="ingredient-tag px-4 py-2 rounded-full font-medium text-sm border-2 ${FARBEN[z.status].border} ${FARBEN[z.status].bg} ${FARBEN[z.status].text} hover:scale-105 cursor-default transition-transform"
+                      title="${FARBEN[z.status].label}"
+                    >
+                      ${z.name}
+                    </div>
+                  `).join("")}
+                </div>
+              `}
+            </div>
+          </div>
+
+          <!-- Versuchs-Zähler -->
+          <div class="mt-4 text-center text-stone-500 text-sm">
+            ${state.versuche} / ${state.maxVersuche} Versuche
+          </div>
+        </main>
+
+        <!-- Lösung-Modal -->
+        <div id="modal-wrapper"></div>
+      `;
+    }
+
+    // Render nur die Teile, die sich ändern (verhindert Input-Drehen!)
+    function render() {
+      const app = document.getElementById("app");
+
+      // Feedback nach 2.5s löschen
+      if (state.feedbackNachricht) {
+        setTimeout(() => {
+          state.feedbackNachricht = "";
+          render();
+        }, 2500);
+      }
+
+      // Wenn Input-Feld fokussiert ist, nur den Inhalt updaten (nicht das Feld neu erstellen)
+      const activeEl = document.activeElement;
+      const zutatInput = document.getElementById("zutat-input");
+      const losungInput = document.getElementById("losung-input");
+
+      if (activeEl === zutatInput || activeEl === losungInput) {
+        // Nur den Kochtopf und Feedback updaten, nicht das Input-Feld
+        const potContent = document.getElementById("pot-content");
+        const feedbackContainer = document.getElementById("feedback-container");
+        const modalWrapper = document.getElementById("modal-wrapper");
+
+        if (potContent) {
+          if (state.gerateneZutaten.length === 0) {
+            potContent.innerHTML = `
+              <div class="flex flex-col items-center justify-center h-40 text-stone-500">
+                <span class="text-4xl mb-2">🥄</span>
+                <p class="text-sm">Hier erscheinen deine Zutaten...</p>
+              </div>
+            `;
+          } else {
+            potContent.innerHTML = `
+              <div class="flex flex-wrap gap-2 justify-center">
+                ${state.gerateneZutaten.map((z, i) => `
+                  <div
+                    class="ingredient-tag px-4 py-2 rounded-full font-medium text-sm border-2 ${FARBEN[z.status].border} ${FARBEN[z.status].bg} ${FARBEN[z.status].text} hover:scale-105 cursor-default transition-transform"
+                    title="${FARBEN[z.status].label}"
+                  >
+                    ${z.name}
+                  </div>
+                `).join("")}
+              </div>
+            `;
+          }
+        }
+
+        if (feedbackContainer) {
+          feedbackContainer.innerHTML = state.feedbackNachricht
+            ? `<p class="mt-3 text-sm text-amber-600 pulse-text">${state.feedbackNachricht}</p>`
+            : '';
+        }
+
+        if (modalWrapper) {
+          if (state.losungsModalOffen) {
+            modalWrapper.innerHTML = `
+              <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onclick="if(event.target === this) { state.losungsModalOffen = false; render(); }">
+                <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md" onclick="event.stopPropagation()">
+                  <h3 class="text-2xl font-bold text-stone-800 mb-2 text-center">Gericht erraten</h3>
+                  <p class="text-stone-500 text-center mb-6">Wie heißt das gesuchte Gericht?</p>
+                  <input
+                    id="losung-input"
+                    type="text"
+                    value="${state.losungsInput}"
+                    oninput="state.losungsInput = this.value"
+                    onkeydown="handleLosungKeyDown(event)"
+                    placeholder="z.B. Tacos, Carbonara..."
+                    class="w-full px-4 py-3 border-2 border-stone-200 rounded-xl text-stone-800 placeholder-stone-400 focus:border-amber-400 focus:outline-none transition-colors mb-4"
+                    autofocus
+                  />
+                  <div class="flex gap-3">
+                    <button onclick="state.losungsModalOffen = false; state.losungsInput = ''; render()" class="flex-1 py-3 bg-stone-100 text-stone-600 rounded-xl font-medium hover:bg-stone-200 transition-colors">
+                      Abbrechen
+                    </button>
+                    <button onclick="handleLösungAbgeben()" class="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors">
+                      Bestätigen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+            setTimeout(() => {
+              const mi = document.getElementById("losung-input");
+              if (mi) mi.focus();
+            }, 50);
+          } else {
+            modalWrapper.innerHTML = '';
+          }
+        }
+        return;
+      }
+
+      // Falls kein Input-Feld fokussiert ist: komplettes Re-Render
+      let content = "";
+      switch (state.spielStatus) {
+        case "gewonnen":
+          content = renderGewonnen();
+          break;
+        case "verloren":
+          content = renderVerloren();
+          break;
+        default:
+          content = renderSpiel();
+          break;
+      }
+      app.innerHTML = content;
+    }
+
+    // ============================================
+    // INIT
+    // ============================================
+    function init() {
+      state.tagesGericht = getZufälligesGericht();
+      render();
+    }
+
+    init();
+  </script>
+</body>
+</html>
